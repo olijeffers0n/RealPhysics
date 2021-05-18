@@ -1,0 +1,13 @@
+# YOU CAN CHANGE THE VALUES BELOW :-)
+
+# Status of the Plugin
+enabled: true
+
+# Integer value for the amount of entities you want per block
+blockMultiplier : 1
+
+# Lowest amount of ticks a block will remain
+lowerTickBound : 100
+
+# Highest amount of ticks a block will remain
+upperTickBound : 240
