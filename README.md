@@ -1,2 +1,41 @@
-# RealPhysics
-A Plugin for Realistic TNT physics
+![GIF](https://media3.giphy.com/media/yDqbkfwQTFJS9M9PI7/giphy.gif?cid=790b7611eb3752c5e260eba52da4a7df15d800594f0f54f0&rid=giphy.gif&ct=g)
+
+# RealPhysics!
+
+This is a plugin designed to replicate realistic physics on explosions using `FallingBlocks` in order to create the entities.
+
+## Blocked Blocks!
+Some Blocks just do not work when they are exploded, and i have included a few:
+```
+- TNT  
+- SNOW  
+- GRASS  
+- TALL_GRASS  
+- DEAD_BUSH  
+- FERN  
+- LARGE_FERN  
+- DARK_OAK_DOOR  
+- OAK_DOOR  
+- BIRCH_DOOR  
+- SPRUCE_DOOR  
+- IRON_DOOR  
+- ACACIA_DOOR  
+- JUNGLE_DOOR  
+- SPRUCE_DOOR  
+- CRIMSON_DOOR  
+- WARPED_DOOR
+```
+There are some more, so just add them to the file using the names from [here](https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Material.html)
+
+## Delay
+The plugin uses a bell curve to distribute the despawning, the max and min times can be changed in the `config.yml` in the unit of ticks
+
+
+## Vector
+The Vector is hard - coded into the program, however it definitely is not perfect. Feel free to open a PR with any changes! 
+
+### Summary
+
+Any changes, just make a PR or contact me on discord at `Ollie#0175`
+
+:-)
