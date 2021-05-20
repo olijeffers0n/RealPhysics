@@ -4,6 +4,9 @@
 
 This is a plugin designed to replicate realistic physics on explosions using `FallingBlocks` in order to create the entities.
 
+This plugin depends on ProtocolLib in order to work, as it uses the packets in order to stop the block despawing on contact with the ground. 
+
+
 ## Blocked Blocks!
 Some Blocks just do not work when they are exploded, and i have included a few:
 ```
