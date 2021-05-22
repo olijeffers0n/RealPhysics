@@ -6,6 +6,8 @@ This is a plugin designed to replicate realistic physics on explosions using `Fa
 
 This plugin depends on ProtocolLib in order to work, as it uses the packets in order to stop the block despawing on contact with the ground. 
 
+## Bugs!
+Multi-Explosion explosions are a bit choppy and laggy, this is due to an extra packet the server sends that i am having a hard time weeding out. Please, help me fix it!
 
 ## Blocked Blocks!
 Some Blocks just do not work when they are exploded, and i have included a few:
@@ -27,6 +29,7 @@ Some Blocks just do not work when they are exploded, and i have included a few:
 - SPRUCE_DOOR  
 - CRIMSON_DOOR  
 - WARPED_DOOR
+- FIRE
 ```
 There are some more, so just add them to the file using the names from [here](https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Material.html)
 
