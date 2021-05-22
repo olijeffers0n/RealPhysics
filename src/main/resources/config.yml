@@ -11,3 +11,6 @@ lowerTickBound : 100
 
 # Highest amount of ticks a block will remain
 upperTickBound : 240
+
+# Time between Garbage collection
+garbageCollectionDelay : 15
