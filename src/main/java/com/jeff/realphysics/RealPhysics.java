@@ -13,6 +13,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
+import com.jeff.realphysics.utils.GarbageCollector;
+import com.jeff.realphysics.utils.Metrics;
 import lombok.Data;
 import org.bukkit.*;
 import org.bukkit.block.Block;
@@ -30,28 +32,60 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.Vector;
 
+/**
+ * A Custom TNT & Explosion Physics Plugin
+ *
+ * Credits - olijeffers0n AKA jeffmcjeffers0n
+ */
+
 public class RealPhysics extends JavaPlugin implements Listener {
 
     private ProtocolManager protocolManager;
     private FallingBlockPacketInterceptor packetInterceptor;
-    public NamespacedKey key;
+    public MidAirVelocityChangePacketInterceptor MidAirInterceptor;
+    private NamespacedKey key;
 
-    public Set<Material> blockedBlocks = new HashSet<>();
+    public int timeUntilGarbageCollector;
+    private int garbageCollectorDelay;
+
+    private Set<Material> blockedBlockTypes;
     public final Set<Integer> blockIDs = new HashSet<>();
+    public Set<Integer> blockIDsInAir = new HashSet<>();
 
     @Override
     public void onEnable() {
 
+        // Starts Bstats
+        new Metrics(this, 11442);
+
+        // Initialises the garbage collector
+        int delay = getConfig().getInt("garbageCollectionDelay");
+        if(delay < (getConfig().getInt("upperTickBound") / 20)) delay = getConfig().getInt("upperTickBound") / 20;
+        this.timeUntilGarbageCollector = delay;
+        this.garbageCollectorDelay = delay;
+
+
+        new GarbageCollector(this, delay);
+
+
         // Serialises the Blocks in the 'blockedBlocks.yml' to the set
         loadBlocks();
-        loadConfig();
+
+        // Loads the Config.yml
+        saveDefaultConfig();
 
         // Creates the NamespacedKey
         this.key = new NamespacedKey(this,"TOBEDESTROYED");
 
+
+        // Deals with all the ProtocolLib stuff
         this.protocolManager = ProtocolLibrary.getProtocolManager();
+        this.MidAirInterceptor = new MidAirVelocityChangePacketInterceptor(this);
         this.packetInterceptor = new FallingBlockPacketInterceptor(this);
         this.protocolManager.addPacketListener(this.packetInterceptor);
+        this.protocolManager.addPacketListener(this.MidAirInterceptor);
+
+        // Registers Events
         Bukkit.getPluginManager().registerEvents(this, this);
 
         getServer().getConsoleSender().sendMessage(ChatColor.GREEN + "[RealPhysics] Plugin Is Enabled");
@@ -64,17 +98,32 @@ public class RealPhysics extends JavaPlugin implements Listener {
     @EventHandler
     public void onExplosion(final EntityExplodeEvent event) {
 
+        // Resets Garbage Collector
+        this.timeUntilGarbageCollector = this.garbageCollectorDelay;
+
         final int maxBlocksPerBlock = this.getConfig().getInt("blockMultiplier");
         final int minimumTicks = this.getConfig().getInt("lowerTickBound");
         final int maximumTicks = this.getConfig().getInt("upperTickBound");
 
+        // Deals with more than one TNT causing chain vectors
+
+            List<Entity> entities = event.getEntity().getNearbyEntities(10, 10, 10);
+            for (Entity entity : entities) {
+                if (entity instanceof FallingBlock) {
+                    PersistentDataContainer container = entity.getPersistentDataContainer();
+                    if (container.has(this.key, PersistentDataType.STRING)) {
+                        Bukkit.getScheduler().runTaskLater(this, () -> {
+                            this.MidAirInterceptor.addOneMoreBlock(entity.getEntityId());
+                        },2L);
+                    }
+                }
+            }
+
         for (final Block exploded : event.blockList()) {
 
-            if(this.blockedBlocks.contains(exploded.getType())) continue;
+            if(this.blockedBlockTypes.contains(exploded.getType())) continue;
 
-            BlockData data;
-
-            data = exploded.getBlockData();
+            BlockData data = exploded.getBlockData();
 
             for(int i = 1; i <= maxBlocksPerBlock; i++) {
 
@@ -106,11 +155,8 @@ public class RealPhysics extends JavaPlugin implements Listener {
         final double z = Math.random() * (Max - Min) + Min;
 
         Vector difference = blockLoc.add(0.5, 2.5, 0.5).toVector().subtract(tntLoc.toVector()).normalize();
-        difference.setX(difference.getX() * x);
-        difference.setY(difference.getY() * y);
-        difference.setZ(difference.getZ() * z);
 
-        return difference;
+        return difference.multiply(new Vector(x,y,z));
     }
 
     /*
@@ -120,11 +166,14 @@ public class RealPhysics extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onBlockChange(final EntityChangeBlockEvent event) {
+
         final Entity entity = event.getEntity();
         final int id = entity.getEntityId();
+
         PersistentDataContainer container = entity.getPersistentDataContainer();
-        if (this.blockIDs.contains(id)) {
+        if (this.blockIDs.remove(id)) {
             event.setCancelled(true);
+
         }else if(container.has(this.key, PersistentDataType.STRING)){
             event.setCancelled(true);
             this.blockIDs.remove(id);
@@ -158,12 +207,18 @@ public class RealPhysics extends JavaPlugin implements Listener {
 
             fallingBlock.getPersistentDataContainer().set(key, PersistentDataType.STRING, "TOBEDESTROYED");
 
-            packetInterceptor.setBlockedOnce(fallingBlock.getEntityId());
             blockIDs.add(this.id);
+            packetInterceptor.setBlockedOnce(this.id);
+
+            blockIDsInAir.add(this.id);
+            MidAirInterceptor.addOneMoreBlock(this.id);
+
         }
 
         public void destroy() {
             blockIDs.remove(this.id);
+            blockIDsInAir.remove(this.id);
+            MidAirInterceptor.removeBlocker(this.id);
 
             final PacketContainer destroyPacket = new PacketContainer(Server.ENTITY_DESTROY);
             destroyPacket.getIntegerArrays().write(0, new int[]{this.id});
@@ -175,7 +230,6 @@ public class RealPhysics extends JavaPlugin implements Listener {
                 }
             });
         }
-
     }
 
     /*
@@ -219,6 +273,7 @@ public class RealPhysics extends JavaPlugin implements Listener {
                     .write(1, (int) (0 * 8000.0D))
                     .write(2, (int) (0 * 8000.0D))
                     .write(3, (int) (0 * 8000.0D));
+            veloctiyPacket.setMeta("CUSTOM", 1);
             Bukkit.getOnlinePlayers().forEach(player -> {
                 try {
                     RealPhysics.this.protocolManager.sendServerPacket(player, veloctiyPacket);
@@ -227,8 +282,58 @@ public class RealPhysics extends JavaPlugin implements Listener {
                 }
             });
         }
+    }
 
+    /*
+    The Interceptor to stop weird lagging midair
+     */
 
+    public class MidAirVelocityChangePacketInterceptor extends PacketAdapter {
+
+        private final Map<Integer, Integer> blockedIDs = new HashMap<>();
+
+        public MidAirVelocityChangePacketInterceptor(final Plugin plugin) {
+            super(plugin, Server.ENTITY_VELOCITY);
+        }
+
+        public void addOneMoreBlock(final int id) {
+            if(!this.blockedIDs.containsKey(id)){
+                this.blockedIDs.put(id,1);
+            }else{
+                int total = this.blockedIDs.get(id);
+                this.blockedIDs.replace(id,total+1);
+            }
+        }
+
+        public void clearBlocker() {
+            this.blockedIDs.clear();
+        }
+
+        public void removeBlocker(final int id) {
+            this.blockedIDs.remove(id);
+        }
+
+        @Override
+        public void onPacketSending(final PacketEvent event) {
+            PacketContainer packet = event.getPacket();
+            final int id = packet.getIntegers().read(0);
+
+            if(packet.getMeta("CUSTOM").isPresent()) return;
+
+            if (blockIDsInAir.contains(id)) {
+
+               if (this.blockedIDs.containsKey(id)) {
+
+                   int totalBlocked = this.blockedIDs.get(id);
+                   if (totalBlocked == 1) {
+                       this.blockedIDs.remove(id);
+                   } else {
+                       this.blockedIDs.replace(id,totalBlocked - 1);
+                   }
+                   event.setCancelled(true);
+               }
+            }
+        }
     }
 
     /*
@@ -246,22 +351,14 @@ public class RealPhysics extends JavaPlugin implements Listener {
 
         List<String> blocks = configuration.getStringList("names");
 
+        Set<Material> materials = new HashSet<>();
+
         for(String block : blocks) {
             try {
-                this.blockedBlocks.add(Material.valueOf(block));
+                materials.add(Material.valueOf(block));
             }catch (IllegalArgumentException ignored){}
         }
+        this.blockedBlockTypes = new HashSet<>(materials);
     }
-
-    private void loadConfig() {
-        File config = new File(this.getDataFolder(), "config.yml");
-
-        if(!config.exists()) {
-            this.saveResource("config.yml", false);
-        }
-
-        saveConfig();
-        reloadConfig();
-    }
-
+    
 }
